@@ -182,3 +182,58 @@ resource "kubernetes_service" "grafana" {
 output "grafana_lb_ip" {
   value = kubernetes_service.grafana.status.0.load_balancer.0.ingress.0.ip
 }
+
+# --------------------------------------------
+# Cloud Function
+# --------------------------------------------
+
+# Bucket to store the cloud function code
+resource "google_storage_bucket" "function_bucket" {
+  name = "my-cloud-function-bucket"
+}
+
+# Upload the cloud function source code to the bucket
+resource "google_storage_bucket_object" "function_code" {
+  name   = "curl-nginx-index.zip"
+  bucket = google_storage_bucket.function_bucket.name
+  source = "./curl-nginx-index.zip"
+}
+
+# Pub/Sub topic used to trigger the cloud function
+resource "google_pubsub_topic" "nginx_curl_topic" {
+  name = "nginx-curl-topic"
+}
+
+# Cloud Function that is triggered by Pub/Sub
+resource "google_cloudfunctions_function" "nginx_curl" {
+  name                  = "curl-nginx-function"
+  description           = "A function that curls Nginx index page"
+  runtime               = "nodejs12"
+  available_memory_mb   = 256
+  source_archive_bucket = google_storage_bucket.function_bucket.name
+  source_archive_object = google_storage_bucket_object.function_code.name
+  trigger_http          = false
+  entry_point           = "curlNginxIndex"
+  event_trigger {
+    event_type = "google.pubsub.topic.publish"
+    resource   = google_pubsub_topic.nginx_curl_topic.name
+  }
+}
+
+# Cloud Scheduler job to trigger the Cloud Function
+resource "google_cloud_scheduler_job" "nginx_curl_scheduler" {
+  name     = "curl-nginx-index-everyday"
+  schedule = "0 7 * * *"
+  time_zone = "Europe/Bucharest"
+
+  pubsub_target {
+    topic_name = google_pubsub_topic.nginx_curl_topic.id
+    data       = base64encode("Curl Nginx")
+  }
+}
+
+# Output the Cloud Function's trigger URL
+output "nginx_curl_function_url" {
+  value = google_cloudfunctions_function.nginx_curl.https_trigger_url
+}
+
