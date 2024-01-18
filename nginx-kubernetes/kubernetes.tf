@@ -268,3 +268,52 @@ data "google_iam_policy" "admin" {
     ]
   }
 }
+
+# --------------------------------------------
+# Ethereum node
+# --------------------------------------------
+
+resource "kubernetes_deployment" "geth" {
+  metadata {
+    name = "geth-node"
+  }
+
+  spec {
+    replicas = 1
+
+    selector {
+      match_labels = {
+        app = "geth-node"
+      }
+    }
+
+    template {
+      metadata {
+        labels = {
+          app = "geth-node"
+        }
+      }
+
+      spec {
+        container {
+          image = "ethereum/client-go:latest"  # Utilisez l'image officielle de Geth
+          name  = "geth-node"
+          args  = [
+            "--http",
+            "--http.addr=0.0.0.0",
+            "--http.port=8545",
+            "--http.corsdomain=http://mattlvsr.fr",
+            "--http.vhosts=*",
+            "--ipcdisable",
+            "--syncmode=snap",  # Utilisez "full" pour un nœud complet, "fast" pour un nœud rapide
+            # Ajoutez d'autres options de configuration Geth ici
+          ]
+
+          port {
+            container_port = 8545  # Port pour l'interface HTTP RPC
+          }
+        }
+      }
+    }
+  }
+}
