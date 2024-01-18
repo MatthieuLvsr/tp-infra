@@ -187,9 +187,22 @@ output "grafana_lb_ip" {
 # Cloud Function
 # --------------------------------------------
 
+# Creation of the serice account
+resource "google_service_account" "cloud_function_account" {
+  account_id   = "cloud-function-account"
+  display_name = "Cloud Function Service Account"
+}
+
+# Setup service account role
+resource "google_project_iam_member" "invoker_role" {
+  role    = "roles/cloudfunctions.invoker"
+  member  = "serviceAccount:${google_service_account.cloud_function_account.email}"
+}
+
+
 # Bucket to store the cloud function code
 resource "google_storage_bucket" "function_bucket" {
-  name = "my-cloud-function-bucket"
+  name = "my-cloud-function-bucket-restricted"
 }
 
 # Upload the cloud function source code to the bucket
@@ -206,13 +219,13 @@ resource "google_pubsub_topic" "nginx_curl_topic" {
 
 # Cloud Function that is triggered by Pub/Sub
 resource "google_cloudfunctions_function" "nginx_curl" {
+  service_account_email = google_service_account.cloud_function_account.email
   name                  = "curl-nginx-function"
   description           = "A function that curls Nginx index page"
   runtime               = "nodejs12"
   available_memory_mb   = 256
   source_archive_bucket = google_storage_bucket.function_bucket.name
   source_archive_object = google_storage_bucket_object.function_code.name
-  trigger_http          = false
   entry_point           = "curlNginxIndex"
   event_trigger {
     event_type = "google.pubsub.topic.publish"
@@ -237,3 +250,21 @@ output "nginx_curl_function_url" {
   value = google_cloudfunctions_function.nginx_curl.https_trigger_url
 }
 
+# IAM policies to allow Cloud Scheduler to trigger the Cloud Function
+resource "google_cloudfunctions_function_iam_policy" "nginx_curl_iam" {
+  project     = var.project_id  # Assurez-vous d'avoir une variable ou une valeur pour le projet
+  region      = var.region   # Assurez-vous d'avoir une variable ou une valeur pour la région
+  cloud_function = google_cloudfunctions_function.nginx_curl.name
+
+  policy_data = data.google_iam_policy.admin.policy_data
+}
+
+data "google_iam_policy" "admin" {
+  binding {
+    role = "roles/cloudfunctions.invoker"
+
+    members = [
+      "serviceAccount:${google_service_account.cloud_function_account.email}",
+    ]
+  }
+}
