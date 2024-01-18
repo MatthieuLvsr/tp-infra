@@ -42,6 +42,10 @@ provider "kubernetes" {
   cluster_ca_certificate = base64decode(data.google_container_cluster.my_cluster.master_auth[0].cluster_ca_certificate)
 }
 
+# --------------------------------------------
+# NGINX
+# --------------------------------------------
+
 resource "kubernetes_deployment" "nginx" {
   metadata {
     name = "scalable-nginx-example"
@@ -106,4 +110,75 @@ resource "kubernetes_service" "nginx" {
 }
 output "lb_ip" {
   value = kubernetes_service.nginx.status.0.load_balancer.0.ingress.0.ip
+}
+
+# --------------------------------------------
+# GRAFANA
+# --------------------------------------------
+
+resource "kubernetes_deployment" "grafana" {
+  metadata {
+    name = "grafana"
+    labels = {
+      App = "Grafana"
+    }
+  }
+
+  spec {
+    replicas = 1
+    selector {
+      match_labels = {
+        App = "Grafana"
+      }
+    }
+    template {
+      metadata {
+        labels = {
+          App = "Grafana"
+        }
+      }
+      spec {
+        container {
+          image = "grafana/grafana:latest"
+          name  = "grafana"
+
+          port {
+            container_port = 3000
+          }
+
+          resources {
+            limits = {
+              cpu    = "200m"
+              memory = "200Mi"
+            }
+            requests = {
+              cpu    = "100m"
+              memory = "100Mi"
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+resource "kubernetes_service" "grafana" {
+  metadata {
+    name = "grafana"
+  }
+  spec {
+    selector = {
+      App = kubernetes_deployment.grafana.metadata[0].labels.App
+    }
+    port {
+      port        = 3000
+      target_port = 3000
+    }
+
+    type = "LoadBalancer"
+  }
+}
+
+output "grafana_lb_ip" {
+  value = kubernetes_service.grafana.status.0.load_balancer.0.ingress.0.ip
 }
