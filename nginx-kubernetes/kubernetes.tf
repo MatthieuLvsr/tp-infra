@@ -317,3 +317,39 @@ resource "kubernetes_deployment" "geth" {
     }
   }
 }
+# --------------------------------------------
+# Postgres
+# --------------------------------------------
+
+resource "google_sql_database_instance" "postgres_instance" {
+  name             = "postgres-instance"
+  database_version = "POSTGRES_13"
+  region           = var.region
+
+  settings {
+    tier = "db-f1-micro"
+
+    backup_configuration {
+      enabled = true
+    }
+
+    ip_configuration {
+      ipv4_enabled = true
+    }
+  }
+}
+
+resource "google_sql_database" "postgres_db" {
+  name     = "mydatabase"
+  instance = google_sql_database_instance.postgres_instance.name
+}
+
+resource "google_sql_user" "postgres_user" {
+  name     = "dbuser"
+  instance = google_sql_database_instance.postgres_instance.name
+  password = "dbpassword"
+}
+
+output "postgres_instance_address" {
+  value = google_sql_database_instance.postgres_instance.first_ip_address
+}
